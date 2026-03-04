@@ -46,62 +46,52 @@ public class MainActivity extends AppCompatActivity {
         myWebView.setWebChromeClient(new WebChromeClient() {
             @Override
             public void onPermissionRequest(final PermissionRequest request) {
-                runOnUiThread(() -> request.grant(request.getResources()));
+                // Check and request permissions if not granted
+                List<String> missingPermissions = new ArrayList<>();
+                for (String resource : request.getResources()) {
+                    String permission = null;
+                    if (PermissionRequest.RESOURCE_VIDEO_CAPTURE.equals(resource)) {
+                        permission = Manifest.permission.CAMERA;
+                    } else if (PermissionRequest.RESOURCE_AUDIO_CAPTURE.equals(resource)) {
+                        permission = Manifest.permission.RECORD_AUDIO;
+                    }
+                    
+                    if (permission != null && ContextCompat.checkSelfPermission(MainActivity.this, permission) != PackageManager.PERMISSION_GRANTED) {
+                        missingPermissions.add(permission);
+                    }
+                }
+
+                if (!missingPermissions.isEmpty()) {
+                    // Store the request to grant it later
+                    mCurrentPermissionRequest = request;
+                    ActivityCompat.requestPermissions(MainActivity.this, missingPermissions.toArray(new String[0]), PERMISSION_REQUEST_CODE);
+                } else {
+                    // All permissions granted, proceed
+                    runOnUiThread(() -> request.grant(request.getResources()));
+                }
             }
 
             @Override
             public void onGeolocationPermissionsShowPrompt(String origin, android.webkit.GeolocationPermissions.Callback callback) {
-                callback.invoke(origin, true, false);
+                if (ContextCompat.checkSelfPermission(MainActivity.this, Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
+                     mGeolocationCallback = callback;
+                     mGeolocationOrigin = origin;
+                     ActivityCompat.requestPermissions(MainActivity.this, new String[]{Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION}, GEOLOCATION_REQUEST_CODE);
+                } else {
+                    callback.invoke(origin, true, false);
+                }
             }
         });
         
         myWebView.loadUrl("https://www.qsgl.net/html/gcw/index.html#/");
         
-        checkAndRequestPermissions();
+        // Removed checkAndRequestPermissions() to allow on-demand requests
     }
 
-    private void checkAndRequestPermissions() {
-        List<String> permissions = new ArrayList<>();
-        
-        // Camera permission
-        if (ContextCompat.checkSelfPermission(this, Manifest.permission.CAMERA) != PackageManager.PERMISSION_GRANTED) {
-            permissions.add(Manifest.permission.CAMERA);
-        }
-        
-        // Location permissions
-        if (ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
-            permissions.add(Manifest.permission.ACCESS_FINE_LOCATION);
-        }
-        if (ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_COARSE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
-            permissions.add(Manifest.permission.ACCESS_COARSE_LOCATION);
-        }
-        
-        // Notification permission (Android 13+)
-        if (Build.VERSION.SDK_INT >= 33) {
-            if (ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {
-                permissions.add(Manifest.permission.POST_NOTIFICATIONS);
-            }
-            // Media permissions (Android 13+)
-            if (ContextCompat.checkSelfPermission(this, Manifest.permission.READ_MEDIA_IMAGES) != PackageManager.PERMISSION_GRANTED) {
-                permissions.add(Manifest.permission.READ_MEDIA_IMAGES);
-            }
-            if (ContextCompat.checkSelfPermission(this, Manifest.permission.READ_MEDIA_VIDEO) != PackageManager.PERMISSION_GRANTED) {
-                permissions.add(Manifest.permission.READ_MEDIA_VIDEO);
-            }
-            if (ContextCompat.checkSelfPermission(this, Manifest.permission.READ_MEDIA_AUDIO) != PackageManager.PERMISSION_GRANTED) {
-                permissions.add(Manifest.permission.READ_MEDIA_AUDIO);
-            }
-        } else {
-            // Storage permission (Android < 13)
-            if (ContextCompat.checkSelfPermission(this, Manifest.permission.READ_EXTERNAL_STORAGE) != PackageManager.PERMISSION_GRANTED) {
-                permissions.add(Manifest.permission.READ_EXTERNAL_STORAGE);
-            }
-        }
-        
-        if (!permissions.isEmpty()) {
-            ActivityCompat.requestPermissions(this, permissions.toArray(new String[0]), PERMISSION_REQUEST_CODE);
-        }
-    }
+    private PermissionRequest mCurrentPermissionRequest;
+    private android.webkit.GeolocationPermissions.Callback mGeolocationCallback;
+    private String mGeolocationOrigin;
+    private static final int GEOLOCATION_REQUEST_CODE = 1002;
 
     @Override
     public void onBackPressed() {
@@ -115,6 +105,39 @@ public class MainActivity extends AppCompatActivity {
     @Override
     public void onRequestPermissionsResult(int requestCode, String[] permissions, int[] grantResults) {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults);
-        // Handle permission results if needed
+        
+        if (requestCode == PERMISSION_REQUEST_CODE) {
+            if (mCurrentPermissionRequest != null) {
+                boolean allGranted = true;
+                for (int result : grantResults) {
+                    if (result != PackageManager.PERMISSION_GRANTED) {
+                        allGranted = false;
+                        break;
+                    }
+                }
+                if (allGranted) {
+                    runOnUiThread(() -> mCurrentPermissionRequest.grant(mCurrentPermissionRequest.getResources()));
+                } else {
+                    runOnUiThread(() -> mCurrentPermissionRequest.deny());
+                }
+                mCurrentPermissionRequest = null;
+            }
+        } else if (requestCode == GEOLOCATION_REQUEST_CODE) {
+             if (grantResults.length > 0 && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
+                 if (mGeolocationCallback != null) {
+                     mGeolocationCallback.invoke(mGeolocationOrigin, true, false);
+                 }
+             } else {
+                 if (mGeolocationCallback != null) {
+                     mGeolocationCallback.invoke(mGeolocationOrigin, false, false);
+                 }
+             }
+             mGeolocationCallback = null;
+             mGeolocationOrigin = null;
+        }
     }
+
+    /*
+     * Removed the bulk permission request method
+     */
 }
