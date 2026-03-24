@@ -7,9 +7,9 @@ import android.Manifest;
 import android.content.Intent;
 import android.net.Uri;
 import android.content.pm.PackageManager;
-import android.os.Build;
 import android.os.Bundle;
 import android.webkit.PermissionRequest;
+import android.webkit.ValueCallback;
 import android.webkit.WebChromeClient;
 import android.webkit.WebSettings;
 import android.webkit.WebView;
@@ -21,7 +21,7 @@ public class MainActivity extends AppCompatActivity {
     private WebView myWebView;
     private static final int PERMISSION_REQUEST_CODE = 1001;
     private static final int FILE_CHOOSER_REQUEST_CODE = 2;
-    private android.webkit.ValueCallbackCallback<android.net.Uri[]> mFilePathCallback;
+    private ValueCallback<Uri[]> mFilePathCallback;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -40,9 +40,7 @@ public class MainActivity extends AppCompatActivity {
         webSettings.setDisplayZoomControls(false);
         webSettings.setSupportZoom(true);
         webSettings.setDefaultTextEncodingName("utf-8");
-        // Enable Geolocation
         webSettings.setGeolocationEnabled(true);
-        // Allow file access
         webSettings.setAllowFileAccess(true);
         webSettings.setAllowContentAccess(true);
 
@@ -53,16 +51,16 @@ public class MainActivity extends AppCompatActivity {
                     Intent intent = new Intent(Intent.ACTION_DIAL);
                     intent.setData(Uri.parse(url));
                     startActivity(intent);
-                    return true; // WebView 不处理该 URL
+                    return true;
                 }
                 view.loadUrl(url);
                 return true;
             }
         });
+
         myWebView.setWebChromeClient(new WebChromeClient() {
             @Override
             public void onPermissionRequest(final PermissionRequest request) {
-                // Check and request permissions if not granted
                 List<String> missingPermissions = new ArrayList<>();
                 for (String resource : request.getResources()) {
                     String permission = null;
@@ -78,11 +76,9 @@ public class MainActivity extends AppCompatActivity {
                 }
 
                 if (!missingPermissions.isEmpty()) {
-                    // Store the request to grant it later
                     mCurrentPermissionRequest = request;
                     ActivityCompat.requestPermissions(MainActivity.this, missingPermissions.toArray(new String[0]), PERMISSION_REQUEST_CODE);
                 } else {
-                    // All permissions granted, proceed
                     runOnUiThread(() -> request.grant(request.getResources()));
                 }
             }
@@ -97,11 +93,24 @@ public class MainActivity extends AppCompatActivity {
                     callback.invoke(origin, true, false);
                 }
             }
+
+            @Override
+            public boolean onShowFileChooser(WebView webView, ValueCallback<Uri[]> filePathCallback, FileChooserParams fileChooserParams) {
+                if (mFilePathCallback != null) {
+                    mFilePathCallback.onReceiveValue(null);
+                }
+                mFilePathCallback = filePathCallback;
+                
+                Intent intent = new Intent(Intent.ACTION_GET_CONTENT);
+                intent.addCategory(Intent.CATEGORY_OPENABLE);
+                intent.setType("*/*");
+                intent.putExtra(Intent.EXTRA_MIME_TYPES, new String[]{"image/*", "video/*"});
+                startActivityForResult(intent, FILE_CHOOSER_REQUEST_CODE);
+                return true;
+            }
         });
         
         myWebView.loadUrl("https://www.zygcw.com/html/gcw/index.html#/");
-        
-        // Removed checkAndRequestPermissions() to allow on-demand requests
     }
 
     private PermissionRequest mCurrentPermissionRequest;
@@ -153,23 +162,22 @@ public class MainActivity extends AppCompatActivity {
         }
     }
 
-    private void openGallery() {
-        Intent intent = new Intent(Intent.ACTION_PICK, android.provider.MediaStore.Images.Media.EXTERNAL_CONTENT_URI);
-        intent.setType("image/*");
-        startActivityForResult(intent, PICK_IMAGE_REQUEST);
-    }
-
     @Override
     protected void onActivityResult(int requestCode, int resultCode, Intent data) {
         super.onActivityResult(requestCode, resultCode, data);
-        if (requestCode == PICK_IMAGE_REQUEST && resultCode == RESULT_OK && data != null) {
-            Uri selectedImage = data.getData();
-            // 在这里处理选中的图片，例如显示在 ImageView 中
-            // imageView.setImageURI(selectedImage);
+        if (requestCode == FILE_CHOOSER_REQUEST_CODE) {
+            if (mFilePathCallback == null) {
+                return;
+            }
+            Uri[] results = null;
+            if (resultCode == RESULT_OK && data != null) {
+                String dataString = data.getDataString();
+                if (dataString != null) {
+                    results = new Uri[]{Uri.parse(dataString)};
+                }
+            }
+            mFilePathCallback.onReceiveValue(results);
+            mFilePathCallback = null;
         }
     }
-
-    /*
-     * Removed the bulk permission request method
-     */
 }
