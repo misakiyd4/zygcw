@@ -98,7 +98,7 @@ public class MainActivity extends AppCompatActivity {
             }
         });
         
-        myWebView.loadUrl("https://www.qsgl.net/html/gcw/index.html#/");
+        myWebView.loadUrl("https://www.zygcw.com/html/gcw/index.html#/");
         
         // Removed checkAndRequestPermissions() to allow on-demand requests
     }
