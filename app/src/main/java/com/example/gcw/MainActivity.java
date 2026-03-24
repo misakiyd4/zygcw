@@ -20,7 +20,8 @@ import java.util.List;
 public class MainActivity extends AppCompatActivity {
     private WebView myWebView;
     private static final int PERMISSION_REQUEST_CODE = 1001;
-    private static final int PICK_IMAGE_REQUEST = 1;
+    private static final int FILE_CHOOSER_REQUEST_CODE = 2;
+    private android.webkit.ValueCallbackCallback<android.net.Uri[]> mFilePathCallback;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
