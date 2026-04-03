@@ -44,6 +44,12 @@ public class MainActivity extends AppCompatActivity {
         webSettings.setAllowFileAccess(true);
         webSettings.setAllowContentAccess(true);
 
+        // 允许网页自动播放视频流，这是解决 Android WebView 扫码出画面但没反应的关键
+        webSettings.setMediaPlaybackRequiresUserGesture(false);
+        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.LOLLIPOP) {
+            webSettings.setMixedContentMode(WebSettings.MIXED_CONTENT_ALWAYS_ALLOW);
+        }
+
         myWebView.setWebViewClient(new WebViewClient() {
             @Override
             public boolean shouldOverrideUrlLoading(WebView view, String url) {
