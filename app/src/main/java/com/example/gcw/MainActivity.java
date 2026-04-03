@@ -8,23 +8,21 @@ import android.content.Intent;
 import android.net.Uri;
 import android.content.pm.PackageManager;
 import android.os.Bundle;
-import android.webkit.JavascriptInterface;
+import android.util.Log;
 import android.webkit.PermissionRequest;
 import android.webkit.ValueCallback;
 import android.webkit.WebChromeClient;
 import android.webkit.WebSettings;
 import android.webkit.WebView;
 import android.webkit.WebViewClient;
-import com.google.zxing.integration.android.IntentIntegrator;
-import com.google.zxing.integration.android.IntentResult;
 import java.util.ArrayList;
 import java.util.List;
 
 public class MainActivity extends AppCompatActivity {
+    private static final String TAG = "MainActivity";
     private WebView myWebView;
     private static final int PERMISSION_REQUEST_CODE = 1001;
     private static final int FILE_CHOOSER_REQUEST_CODE = 2;
-    private static final int QR_SCAN_REQUEST_CODE = 3;
     private ValueCallback<Uri[]> mFilePathCallback;
 
     @Override
@@ -68,12 +66,10 @@ public class MainActivity extends AppCompatActivity {
             }
         });
 
-        // 添加 JavaScript Bridge 用于扫码
-        myWebView.addJavascriptInterface(new QRScannerBridge(), "QRScannerBridge");
-
         myWebView.setWebChromeClient(new WebChromeClient() {
             @Override
             public void onPermissionRequest(final PermissionRequest request) {
+                Log.d(TAG, "onPermissionRequest: " + java.util.Arrays.toString(request.getResources()));
                 List<String> missingPermissions = new ArrayList<>();
                 for (String resource : request.getResources()) {
                     String permission = null;
@@ -89,9 +85,11 @@ public class MainActivity extends AppCompatActivity {
                 }
 
                 if (!missingPermissions.isEmpty()) {
+                    Log.d(TAG, "Requesting permissions: " + missingPermissions);
                     mCurrentPermissionRequest = request;
                     ActivityCompat.requestPermissions(MainActivity.this, missingPermissions.toArray(new String[0]), PERMISSION_REQUEST_CODE);
                 } else {
+                    Log.d(TAG, "Granting permission request");
                     runOnUiThread(() -> request.grant(request.getResources()));
                 }
             }
@@ -145,6 +143,7 @@ public class MainActivity extends AppCompatActivity {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults);
         
         if (requestCode == PERMISSION_REQUEST_CODE) {
+            Log.d(TAG, "onRequestPermissionsResult: " + java.util.Arrays.toString(permissions) + " -> " + java.util.Arrays.toString(grantResults));
             if (mCurrentPermissionRequest != null) {
                 boolean allGranted = true;
                 for (int result : grantResults) {
@@ -154,8 +153,10 @@ public class MainActivity extends AppCompatActivity {
                     }
                 }
                 if (allGranted) {
+                    Log.d(TAG, "All permissions granted, granting request");
                     runOnUiThread(() -> mCurrentPermissionRequest.grant(mCurrentPermissionRequest.getResources()));
                 } else {
+                    Log.d(TAG, "Some permissions denied, denying request");
                     runOnUiThread(() -> mCurrentPermissionRequest.deny());
                 }
                 mCurrentPermissionRequest = null;
@@ -191,43 +192,6 @@ public class MainActivity extends AppCompatActivity {
             }
             mFilePathCallback.onReceiveValue(results);
             mFilePathCallback = null;
-        } else if (requestCode == QR_SCAN_REQUEST_CODE) {
-            IntentResult result = IntentIntegrator.parseActivityResult(requestCode, resultCode, data);
-            if (result != null) {
-                if (result.getContents() != null) {
-                    final String scanResult = result.getContents();
-                    runOnUiThread(() -> {
-                        myWebView.evaluateJavascript(
-                            "if (window.__qrScanCallback) { window.__qrScanCallback('" + scanResult.replace("'", "\\'") + "'); }",
-                            null
-                        );
-                    });
-                } else {
-                    runOnUiThread(() -> {
-                        myWebView.evaluateJavascript(
-                            "if (window.__qrScanError) { window.__qrScanError('scan_cancelled'); }",
-                            null
-                        );
-                    });
-                }
-            }
-        }
-    }
-
-    // JavaScript Bridge 类
-    private class QRScannerBridge {
-        @JavascriptInterface
-        public void scan() {
-            runOnUiThread(() -> {
-                IntentIntegrator integrator = new IntentIntegrator(MainActivity.this);
-                integrator.setDesiredBarcodeFormats(IntentIntegrator.QR_CODE);
-                integrator.setPrompt("扫描二维码");
-                integrator.setCameraId(0);
-                integrator.setBeepEnabled(true);
-                integrator.setBarcodeImageEnabled(false);
-                integrator.setOrientationLocked(false);
-                integrator.initiateScan();
-            });
         }
     }
 }
