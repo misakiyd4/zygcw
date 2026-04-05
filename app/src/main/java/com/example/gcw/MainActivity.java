@@ -69,29 +69,34 @@ public class MainActivity extends AppCompatActivity {
         myWebView.setWebChromeClient(new WebChromeClient() {
             @Override
             public void onPermissionRequest(final PermissionRequest request) {
-                Log.d(TAG, "onPermissionRequest: " + java.util.Arrays.toString(request.getResources()));
-                List<String> missingPermissions = new ArrayList<>();
-                for (String resource : request.getResources()) {
-                    String permission = null;
-                    if (PermissionRequest.RESOURCE_VIDEO_CAPTURE.equals(resource)) {
-                        permission = Manifest.permission.CAMERA;
-                    } else if (PermissionRequest.RESOURCE_AUDIO_CAPTURE.equals(resource)) {
-                        permission = Manifest.permission.RECORD_AUDIO;
-                    }
-                    
-                    if (permission != null && ContextCompat.checkSelfPermission(MainActivity.this, permission) != PackageManager.PERMISSION_GRANTED) {
-                        missingPermissions.add(permission);
-                    }
-                }
+                // 确保在主线程执行
+                runOnUiThread(() -> {
+                    try {
+                        List<String> missingPermissions = new ArrayList<>();
+                        for (String resource : request.getResources()) {
+                            String permission = null;
+                            if (PermissionRequest.RESOURCE_VIDEO_CAPTURE.equals(resource)) {
+                                permission = Manifest.permission.CAMERA;
+                            } else if (PermissionRequest.RESOURCE_AUDIO_CAPTURE.equals(resource)) {
+                                permission = Manifest.permission.RECORD_AUDIO;
+                            }
+                            
+                            if (permission != null && ContextCompat.checkSelfPermission(MainActivity.this, permission) != PackageManager.PERMISSION_GRANTED) {
+                                missingPermissions.add(permission);
+                            }
+                        }
 
-                if (!missingPermissions.isEmpty()) {
-                    Log.d(TAG, "Requesting permissions: " + missingPermissions);
-                    mCurrentPermissionRequest = request;
-                    ActivityCompat.requestPermissions(MainActivity.this, missingPermissions.toArray(new String[0]), PERMISSION_REQUEST_CODE);
-                } else {
-                    Log.d(TAG, "Granting permission request");
-                    runOnUiThread(() -> request.grant(request.getResources()));
-                }
+                        if (!missingPermissions.isEmpty()) {
+                            mCurrentPermissionRequest = request;
+                            ActivityCompat.requestPermissions(MainActivity.this, missingPermissions.toArray(new String[0]), PERMISSION_REQUEST_CODE);
+                        } else {
+                            // 如果已经有 Android 权限，直接授权给 WebView
+                            request.grant(request.getResources());
+                        }
+                    } catch (Exception e) {
+                        e.printStackTrace();
+                    }
+                });
             }
 
             @Override
@@ -149,6 +154,7 @@ public class MainActivity extends AppCompatActivity {
         
         if (requestCode == PERMISSION_REQUEST_CODE) {
             Log.d(TAG, "onRequestPermissionsResult: " + java.util.Arrays.toString(permissions) + " -> " + java.util.Arrays.toString(grantResults));
+            // 每次权限返回后，检查是否是 WebView 的请求
             if (mCurrentPermissionRequest != null) {
                 boolean allGranted = true;
                 for (int result : grantResults) {
@@ -159,12 +165,28 @@ public class MainActivity extends AppCompatActivity {
                 }
                 if (allGranted) {
                     Log.d(TAG, "All permissions granted, granting request");
-                    runOnUiThread(() -> mCurrentPermissionRequest.grant(mCurrentPermissionRequest.getResources()));
+                    runOnUiThread(() -> {
+                        try {
+                            mCurrentPermissionRequest.grant(mCurrentPermissionRequest.getResources());
+                        } catch (Exception e) {
+                            e.printStackTrace();
+                        }
+                    });
                 } else {
                     Log.d(TAG, "Some permissions denied, denying request");
-                    runOnUiThread(() -> mCurrentPermissionRequest.deny());
+                    runOnUiThread(() -> {
+                        try {
+                            mCurrentPermissionRequest.deny();
+                        } catch (Exception e) {
+                            e.printStackTrace();
+                        }
+                    });
                 }
                 mCurrentPermissionRequest = null;
+            } else {
+                // 如果不是 WebView 直接触发的权限请求，我们需要通知 WebView 重新加载页面或执行 JS
+                // 以便网页中的 html5-qrcode 可以重新获取权限状态
+                myWebView.evaluateJavascript("if (window.location.href.includes('扫码页面的路由或标识')) { window.location.reload(); }", null);
             }
         } else if (requestCode == GEOLOCATION_REQUEST_CODE) {
              if (grantResults.length > 0 && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
