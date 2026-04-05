@@ -107,6 +107,11 @@ public class MainActivity extends AppCompatActivity {
 
             @Override
             public boolean onShowFileChooser(WebView webView, ValueCallback<Uri[]> filePathCallback, FileChooserParams fileChooserParams) {
+                // 如果是请求视频捕获（摄像头），则交给网页自己处理
+                if (fileChooserParams != null && fileChooserParams.isCaptureEnabled()) {
+                    return false;
+                }
+
                 if (mFilePathCallback != null) {
                     mFilePathCallback.onReceiveValue(null);
                 }
